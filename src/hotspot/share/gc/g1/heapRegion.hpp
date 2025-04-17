@@ -280,6 +280,13 @@ private:
   // Returns the block size of the given (dead, potentially having its class unloaded) object
   // starting at p extending to at most the prev TAMS using the given mark bitmap.
   inline size_t block_size_using_bitmap(const HeapWord* p, const G1CMBitMap* const prev_bitmap) const;
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Save stats of madv cost of free regions.
+  size_t _madv_count;
+  // size_t _madv_cycles;
+  // size_t _madv_exit_cycles;
+
 public:
   HeapRegion(uint hrm_index, G1BlockOffsetTable* bot, MemRegion mr);
 
@@ -292,6 +299,12 @@ public:
   // The default values for clear_space means that we will do the clearing if
   // there's clearing to be done ourselves. We also always mangle the space.
   void initialize(bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Get stats of madv cost of free regions.
+  size_t get_madv_count() const { return _madv_count; }
+  // size_t get_madv_cycles() const { return _madv_cycles; }
+  // size_t get_madv_exit_cycles() const { return _madv_exit_cycles; }
 
   static int    LogOfHRGrainBytes;
   static int    LogCardsPerRegion;

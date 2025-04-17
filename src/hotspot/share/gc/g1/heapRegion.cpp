@@ -153,6 +153,46 @@ void HeapRegion::calc_gc_efficiency() {
 
 void HeapRegion::set_free() {
   report_region_type_change(G1HeapRegionTraceType::Free);
+
+  size_t ts = 0, ts_exit_sys = 0, tmp;
+  int count = 0;
+
+  // // [gc breakdown][region majflt][swapout garbage]
+  // // Add a free region.
+  // if (UseProfileRegionMajflt) {
+  //   ts = os::rdtsc();
+  //   if(os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end)) {
+  //     log_info(gc)("[set free] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
+  //     os::abort();
+  //   }
+  //   ts = os::rdtsc() - ts;
+  //   count = 1;
+  // }
+
+  if (UseMadvFree) {
+    ts = os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes, &tmp);
+    ts_exit_sys = tmp;
+    count = 1;
+  } else if (UseMadvFreePage > 0) {
+    uint step = 4096 * UseMadvFreePage;
+    char* addr = (char*)_bottom;
+    char* last_page = (char*)_end - step;
+    while(addr <= last_page) {
+      ts += os::free_page_frames(true, (char*)addr, step, &tmp);
+      ts_exit_sys += tmp;
+      addr += step;
+      count += 1;
+    }
+  } else if (UseMadvDontneed) {
+    ts = os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes, NULL);
+    count = 1;
+  }
+
+  if (count > 0) {
+    Atomic::add(&_madv_count, (size_t)count, memory_order_relaxed);
+    // Atomic::add(&_madv_cycles, ts, memory_order_relaxed);
+  }
+
   _type.set_free();
 }
 
@@ -247,7 +287,8 @@ HeapRegion::HeapRegion(uint hrm_index,
   _prev_marked_bytes(0), _next_marked_bytes(0),
   _young_index_in_cset(-1),
   _surv_rate_group(NULL), _age_index(G1SurvRateGroup::InvalidAgeIndex), _gc_efficiency(-1.0),
-  _node_index(G1NUMA::UnknownNodeIndex)
+  _node_index(G1NUMA::UnknownNodeIndex),
+  _madv_count(0)
 {
   assert(Universe::on_page_boundary(mr.start()) && Universe::on_page_boundary(mr.end()),
          "invalid space boundaries");

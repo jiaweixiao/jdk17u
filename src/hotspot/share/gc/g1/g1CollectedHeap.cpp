@@ -1778,6 +1778,7 @@ void G1CollectedHeap::stop() {
   _cr->stop();
   _service_thread->stop();
   _cm_thread->stop();
+  _hrm.dump_madv_cost();
 }
 
 void G1CollectedHeap::safepoint_synchronize_begin() {

@@ -270,6 +270,10 @@ public:
   // and not free, and return the number of regions newly committed in commit_count.
   bool allocate_containing_regions(MemRegion range, size_t* commit_count, WorkGang* pretouch_workers);
 
+  // [gc breakdown][region majflt][swapout garbage]
+  // Print stats of madv cost of free regions.
+  void dump_madv_cost() const;
+
   // Apply blk->do_heap_region() on all committed regions in address order,
   // terminating the iteration early if do_heap_region() returns true.
   void iterate(HeapRegionClosure* blk) const;

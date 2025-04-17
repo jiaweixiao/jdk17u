@@ -110,6 +110,24 @@
                                                                             \
   /* gc */                                                                  \
                                                                             \
+  product(bool, UseProfileRegionMajflt, false,                              \
+          "Enable profile region majflt")                                   \
+                                                                            \
+  product(bool, UseProfileDeadPageInOld, false,                             \
+          "Count # of dead pages in old after CM but before Mixed GC")      \
+                                                                            \
+  product(bool, UseFreeDeadPage, false,                                     \
+          "Free free pages after CM of genshen")                            \
+                                                                            \
+  product(bool, UseMadvFree, false,                                         \
+          "Free free regions with madvise MADV_FREE")                       \
+                                                                            \
+  product(uint, UseMadvFreePage, 0,                                         \
+          "Free free regions with madvise MADV_FREE in # page granularity") \
+                                                                            \
+  product(bool, UseMadvDontneed, false,                                     \
+          "Free free regions with madvise MADV_DONTNEED")                   \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \

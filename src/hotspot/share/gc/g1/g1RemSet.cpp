@@ -1751,6 +1751,12 @@ class G1RebuildRemSetTask: public AbstractGangTask {
     G1ConcurrentMark* _cm;
     G1RebuildRemSetClosure _update_cl;
 
+    // [gc breakdown][region majflt][swapout garbage]
+    // Find dead page in region.    
+    // bins: 2^0, ..., 2^log2i(4KB pages per region)
+    uint* _dead_ranges_log2;
+    uint _dead_ranges_len;
+
     // Applies _update_cl to the references of the given object, limiting objArrays
     // to the given MemRegion. Returns the amount of words actually scanned.
     size_t scan_for_references(oop const obj, MemRegion mr) {
@@ -1846,6 +1852,71 @@ class G1RebuildRemSetTask: public AbstractGangTask {
       }
     };
 
+    void dump_dead_ranges() {
+      for (uint i = 0; i < _dead_ranges_len; i++)
+        if (_dead_ranges_log2[i] > 0)
+          log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
+    }
+
+    void profile_dead_range_in_region(const G1CMBitMap* const bitmap,
+                                      HeapWord* const bottom,
+                                      HeapWord* const limit) {
+      if (((uintptr_t)limit) - ((uintptr_t)bottom) < 4096)
+        return;
+
+      HeapWord* start = bottom;
+      HeapWord* dead_obj;
+      uintptr_t dead_page_start, live_page_start;
+      oop obj;
+      int tmp_dead_pages;
+
+      while (start < limit) {
+        obj = cast_to_oop(start);
+        if (!bitmap->is_marked(obj)) { // Object is not marked
+          // Dead range is [dead_obj, next live obj)
+          dead_obj = start;
+          start = bitmap->get_next_marked_addr(start, limit);
+          dead_page_start = (((uintptr_t)dead_obj) + 4096 -1) >> 12;
+          live_page_start = ((uintptr_t)start) >> 12;
+          tmp_dead_pages = live_page_start - dead_page_start;
+          if (tmp_dead_pages > 0) {
+            assert(log2i(tmp_dead_pages) < (int)_dead_ranges_len, "dead range len %d, %d", tmp_dead_pages, _dead_ranges_len);
+            // Account consecutive dead pages per worker.
+            _dead_ranges_log2[log2i(tmp_dead_pages)] += 1;
+
+            // Free dead range.
+            if (UseFreeDeadPage) {
+              // DEBUG
+              // Copy::zero_to_bytes((char*)dead_obj, (uintptr_t)start - (uintptr_t)dead_obj);
+              // Copy::zero_to_bytes((char*)(dead_page_start << 12), tmp_dead_pages << 12);
+
+              if (UseProfileRegionMajflt) {
+                // if(os::adc_advise_free_range(dead_page_start << 12, live_page_start << 12)) {
+                //   log_info(gc)("[account_dead_ranges] fails adc_advise_free_range, stt: " PTR_FORMAT " end: " PTR_FORMAT, dead_page_start << 12, live_page_start << 12);
+                //   os::abort();
+                // }
+              } else if (UseMadvFree) {
+                os::free_page_frames(true,
+                  (char*)(dead_page_start << 12), tmp_dead_pages << 12, NULL);
+              } else if (UseMadvDontneed) {
+                os::free_page_frames(false,
+                  (char*)(dead_page_start << 12), tmp_dead_pages << 12, NULL);
+              }
+            }
+          }
+          // // DEBUG
+          // log_info(gc)("dead range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(dead_obj), p2i(start));
+        } else { // Object is marked
+          start += obj->size();
+        }
+
+        _cm->do_yield_check();
+        if (_cm->has_aborted()) {
+          return;
+        }
+      }
+    }
+
     // Rebuild remembered sets in the part of the region specified by mr and hr.
     // Objects between the bottom of the region and the TAMS are checked for liveness
     // using the given bitmap. Objects between TAMS and TARS are assumed to be live.
@@ -1886,12 +1957,26 @@ class G1RebuildRemSetTask: public AbstractGangTask {
       return marked_words * HeapWordSize;
     }
 public:
-  G1RebuildRemSetHeapRegionClosure(G1CollectedHeap* g1h,
-                                   G1ConcurrentMark* cm,
-                                   uint worker_id) :
-    HeapRegionClosure(),
-    _cm(cm),
-    _update_cl(g1h, worker_id) { }
+    G1RebuildRemSetHeapRegionClosure(G1CollectedHeap* g1h,
+                                    G1ConcurrentMark* cm,
+                                    uint worker_id) :
+      HeapRegionClosure(),
+      _cm(cm),
+      _update_cl(g1h, worker_id) {
+      if (UseProfileDeadPageInOld) {
+        // bins: 2^0, ..., 2^log2i(4KB pages per region)
+        _dead_ranges_len = log2i(HeapRegion::GrainBytes >> 12) + 1;
+        _dead_ranges_log2 = NEW_C_HEAP_ARRAY(uint, _dead_ranges_len, mtGC);
+        memset(_dead_ranges_log2, 0, sizeof(uint) * _dead_ranges_len);
+      }
+    }
+
+    ~G1RebuildRemSetHeapRegionClosure() {
+      if (UseProfileDeadPageInOld) {
+        dump_dead_ranges();
+        FREE_C_HEAP_ARRAY(uint, _dead_ranges_log2);
+      }
+    }
 
     bool do_heap_region(HeapRegion* hr) {
       if (_cm->has_aborted()) {
@@ -1909,6 +1994,16 @@ public:
       size_t const chunk_size_in_words = G1RebuildRemSetChunkSize / HeapWordSize;
 
       HeapWord* const top_at_mark_start = hr->prev_top_at_mark_start();
+
+      if (UseProfileDeadPageInOld && !hr->is_humongous()) {
+        profile_dead_range_in_region(_cm->prev_mark_bitmap(),
+                                     hr->bottom(),
+                                     top_at_mark_start);    
+        _cm->do_yield_check();
+        if (_cm->has_aborted()) {
+          return true;
+        }
+      }
 
       HeapWord* cur = hr->bottom();
       while (cur < hr->end()) {

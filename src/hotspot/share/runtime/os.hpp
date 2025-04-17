@@ -213,6 +213,9 @@ class os: AllStatic {
   static jlong elapsed_counter();
   static jlong elapsed_frequency();
 
+  // [gc breakdown][region majflt][swapout garbage]
+  static size_t free_page_frames(bool lazy, char *addr, size_t bytes, size_t *exit_sys);
+
   // The "virtual time" of a thread is the amount of time a thread has
   // actually run.  The first function indicates whether the OS supports
   // this functionality for the current thread, and if so the second
