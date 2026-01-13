@@ -520,6 +520,7 @@ HeapRegion* HeapRegionManager::next_region_in_heap(const HeapRegion* r) const {
 void HeapRegionManager::dump_madv_cost() const {
   uint len = reserved_length();
   size_t count = 0;
+  size_t count_young = 0;
   // size_t time_cycles = 0;
   // size_t time_exit_cycles = 0;
   for (uint i = 0; i < len; i++) {
@@ -528,12 +529,13 @@ void HeapRegionManager::dump_madv_cost() const {
     }
     guarantee(at(i) != nullptr, "Tried to access region %u that has a null HeapRegion*", i);
     count += at(i)->get_madv_count();
+    count_young += at(i)->get_madv_count_young();
     // time_cycles += at(i)->get_madv_cycles();
     // time_exit_cycles += at(i)->get_madv_exit_cycles();
   }
   // log_info(gc)("Free Regions (sum): %lu, %.1fns, exit %.1fns", 
   //         count, time_cycles / 2.4, time_exit_cycles / 2.4);
-  log_info(gc)("Free Regions (sum): %lu", count);
+  log_info(gc)("Free Regions (sum): %lu, young: %lu", count, count_young);
 }
 
 void HeapRegionManager::iterate(HeapRegionClosure* blk) const {

@@ -196,6 +196,9 @@ void HeapRegion::set_free() {
 
   if (count > 0) {
     Atomic::add(&_madv_count, (size_t)count, memory_order_relaxed);
+    if (is_young()) {
+      Atomic::add(&_madv_count_young, (size_t)count, memory_order_relaxed);
+    }
     // Atomic::add(&_madv_cycles, ts, memory_order_relaxed);
   }
 
@@ -326,7 +329,8 @@ HeapRegion::HeapRegion(uint hrm_index,
   _young_index_in_cset(-1),
   _surv_rate_group(NULL), _age_index(G1SurvRateGroup::InvalidAgeIndex), _gc_efficiency(-1.0),
   _node_index(G1NUMA::UnknownNodeIndex),
-  _madv_count(0)
+  _madv_count(0),
+  _madv_count_young(0)
 {
   assert(Universe::on_page_boundary(mr.start()) && Universe::on_page_boundary(mr.end()),
          "invalid space boundaries");

@@ -1757,6 +1757,8 @@ class G1RebuildRemSetTask: public AbstractGangTask {
     uint* _dead_ranges_log2;
     uint _dead_ranges_len;
 
+    size_t _dead_pages_count;
+
     // Applies _update_cl to the references of the given object, limiting objArrays
     // to the given MemRegion. Returns the amount of words actually scanned.
     size_t scan_for_references(oop const obj, MemRegion mr) {
@@ -1856,17 +1858,15 @@ class G1RebuildRemSetTask: public AbstractGangTask {
       for (uint i = 0; i < _dead_ranges_len; i++)
         if (_dead_ranges_log2[i] > 0)
           log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
+      log_info(gc)("Dead Pages Count: %lu", _dead_pages_count);
     }
-
-    void profile_dead_range_in_region(const G1CMBitMap* const bitmap,
-                                      HeapWord* const bottom,
-                                      HeapWord* const limit) {
       if (((uintptr_t)limit) - ((uintptr_t)bottom) < 4096)
         return;
 
       HeapWord* start = bottom;
       HeapWord* dead_obj;
-      uintptr_t dead_page_start, live_page_start;
+      uintptr_t dead_page_start;
+      uintptr_t live_page_start;
       oop obj;
       int tmp_dead_pages;
 
@@ -1883,6 +1883,7 @@ class G1RebuildRemSetTask: public AbstractGangTask {
             assert(log2i(tmp_dead_pages) < (int)_dead_ranges_len, "dead range len %d, %d", tmp_dead_pages, _dead_ranges_len);
             // Account consecutive dead pages per worker.
             _dead_ranges_log2[log2i(tmp_dead_pages)] += 1;
+            _dead_pages_count += tmp_dead_pages;
 
             // Free dead range.
             if (UseFreeDeadPage) {
@@ -1968,6 +1969,7 @@ public:
         _dead_ranges_len = log2i(HeapRegion::GrainBytes >> 12) + 1;
         _dead_ranges_log2 = NEW_C_HEAP_ARRAY(uint, _dead_ranges_len, mtGC);
         memset(_dead_ranges_log2, 0, sizeof(uint) * _dead_ranges_len);
+        _dead_pages_count = 0;
       }
     }
 
