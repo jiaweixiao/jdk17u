@@ -286,6 +286,7 @@ private:
   size_t _madv_count;
   // size_t _madv_cycles;
   // size_t _madv_exit_cycles;
+  size_t _madv_count_young;
 
 public:
   HeapRegion(uint hrm_index, G1BlockOffsetTable* bot, MemRegion mr);
@@ -305,6 +306,7 @@ public:
   size_t get_madv_count() const { return _madv_count; }
   // size_t get_madv_cycles() const { return _madv_cycles; }
   // size_t get_madv_exit_cycles() const { return _madv_exit_cycles; }
+  size_t get_madv_count_young() const { return _madv_count_young; }
 
   static int    LogOfHRGrainBytes;
   static int    LogCardsPerRegion;
