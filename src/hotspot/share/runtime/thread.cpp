@@ -38,6 +38,7 @@
 #include "compiler/compileBroker.hpp"
 #include "compiler/compileTask.hpp"
 #include "compiler/compilerThread.hpp"
+#include "gc/g1/g1CollectedHeap.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/gcId.hpp"
@@ -3472,6 +3473,29 @@ void Threads::destroy_vm() {
 #endif
 
   notify_vm_shutdown();
+
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt) {
+    os::adc_advise_release_bitmap();
+    log_info(gc,heap,exit)("release bitmap shared memory in kernel");
+    CollectedHeap* heap = Universe::heap();
+    if (heap->kind() == CollectedHeap::G1) {
+      G1CollectedHeap* g1h = (G1CollectedHeap*)heap;
+      os::adc_advise_unmap_shm((void*)(g1h->get_alloc_bitmap_shm()),
+        g1h->get_shm_size_bytes());
+      os::adc_advise_unmap_shm((void*)(g1h->get_uninit_bitmap_shm()),
+        g1h->get_shm_size_bytes());
+      os::adc_advise_unmap_shm((void*)(g1h->get_remote_bitmap_shm()),
+        g1h->get_shm_size_bytes());
+      if (UseProfileSwapsRegionType) {
+        os::adc_advise_unmap_shm((void*)(g1h->get_free_bitmap_shm()),
+          g1h->get_shm_size_bytes());
+        os::adc_advise_unmap_shm((void*)(g1h->get_young_bitmap_shm()),
+          g1h->get_shm_size_bytes());
+      }
+      log_info(gc,heap,exit)("unmap bitmap shared memory");
+    }
+  }
 
   // exit_globals() will delete tty
   exit_globals();

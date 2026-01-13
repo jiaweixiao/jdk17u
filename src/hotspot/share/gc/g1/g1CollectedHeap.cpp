@@ -1485,7 +1485,13 @@ G1CollectedHeap::G1CollectedHeap() :
   _ref_processor_cm(NULL),
   _is_alive_closure_cm(this),
   _is_subject_to_discovery_cm(this),
-  _region_attr() {
+  _region_attr(),
+  _bitmap_shm_size_bytes(0),
+  _alloc_bitmap_shm(nullptr),
+  _uninit_bitmap_shm(nullptr),
+  _remote_bitmap_shm(nullptr),
+  _free_bitmap_shm(nullptr),
+  _young_bitmap_shm(nullptr) {
 
   _verifier = new G1HeapVerifier(this);
 
@@ -1692,6 +1698,64 @@ jint G1CollectedHeap::initialize() {
 
     _region_attr.initialize(reserved(), granularity);
     _humongous_reclaim_candidates.initialize(reserved(), granularity);
+  }
+
+  // 
+  // [gc breakdown][region majflt]
+  // Init page status bitmap in kernel
+  // 
+  if (UseProfileRegionMajflt) {
+    // adc advise region size is equal to 4KB page.
+    log_info(gc,init)("Init bitmap [" PTR_FORMAT ", " PTR_FORMAT "), grain %dB",
+            p2i(_hrm.reserved().start()), p2i(_hrm.reserved().end()), 4096);
+    if(os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
+            reserved().byte_size() >> 12, 4096)) {
+      log_info(gc,init)("[initialize] fails adc_advise_init_bitmap");
+      os::abort();
+    }
+
+    _bitmap_shm_size_bytes = (reserved().byte_size() >> 12) * sizeof(bool);
+    _alloc_bitmap_shm = (volatile bool*)os::adc_advise_map_shm(
+      "/dev/skipswap_alloc_bitmap", _bitmap_shm_size_bytes);
+    if (_alloc_bitmap_shm == nullptr) {
+      log_info(gc,init)("[initialize] fails mmap alloc_bitmap_shm");
+      os::abort();
+    }
+    log_info(gc, init)("map alloc bitmap at " PTR_FORMAT, p2i(_alloc_bitmap_shm));
+
+    _uninit_bitmap_shm = (volatile bool*)os::adc_advise_map_shm(
+      "/dev/skipswap_uninit_bitmap", _bitmap_shm_size_bytes);
+    if (_uninit_bitmap_shm == nullptr) {
+      log_info(gc,init)("[initialize] fails mmap uninit_bitmap_shm");
+      os::abort();
+    }
+    log_info(gc, init)("map uninit bitmap at " PTR_FORMAT, p2i(_uninit_bitmap_shm));
+
+    _remote_bitmap_shm = (volatile bool*)os::adc_advise_map_shm(
+      "/dev/skipswap_remote_bitmap", _bitmap_shm_size_bytes);
+    if (_remote_bitmap_shm == nullptr) {
+      log_info(gc,init)("[initialize] fails mmap remote_bitmap_shm");
+      os::abort();
+    }
+    log_info(gc, init)("map remote bitmap at " PTR_FORMAT, p2i(_remote_bitmap_shm));
+
+    if (UseProfileSwapsRegionType) {
+      _free_bitmap_shm = (volatile bool*)os::adc_advise_map_shm(
+        "/dev/skipswap_free_bitmap", _bitmap_shm_size_bytes);
+      if (_free_bitmap_shm == nullptr) {
+        log_info(gc,init)("[initialize] fails mmap free_bitmap_shm");
+        os::abort();
+      }
+
+      log_info(gc, init)("map young bitmap at " PTR_FORMAT, p2i(_young_bitmap_shm));
+      _young_bitmap_shm = (volatile bool*)os::adc_advise_map_shm(
+        "/dev/skipswap_young_bitmap", _bitmap_shm_size_bytes);
+      if (_young_bitmap_shm == nullptr) {
+        log_info(gc,init)("[initialize] fails mmap young_bitmap_shm");
+        os::abort();
+      }
+      log_info(gc, init)("map young bitmap at " PTR_FORMAT, p2i(_young_bitmap_shm));
+    }
   }
 
   _workers = new WorkGang("GC Thread", ParallelGCThreads,
@@ -3891,6 +3955,64 @@ void G1CollectedHeap::prepend_to_freelist(FreeRegionList* list) {
 
 void G1CollectedHeap::decrement_summary_bytes(size_t bytes) {
   decrease_used(bytes);
+}
+int G1CollectedHeap::set_free_range(uintptr_t addr, size_t bytes) {
+  size_t page_size = 4096;
+  uintptr_t base = (uintptr_t)_hrm.reserved().start();
+  // if (addr < base) {
+  //   log_info(gc)("set_free_range: addr < heap base");
+  //   os::abort();
+  // }
+  size_t page_id = (addr - base + page_size - 1) >> 12;
+  size_t end = (addr + bytes - base) >> 12;
+  while (page_id < end) {
+    _alloc_bitmap_shm[page_id] = 0;
+    // We only make a remote page uninit
+    if (_remote_bitmap_shm[page_id]) {
+      _uninit_bitmap_shm[page_id] = 1;
+    }
+    // Profiling
+    if (UseProfileSwapsRegionType) {
+      _free_bitmap_shm[page_id] = 1;
+      _young_bitmap_shm[page_id] = 1;
+    }
+    page_id += 1;
+  }
+  return 0;
+}
+
+int G1CollectedHeap::set_young_range(uintptr_t addr, size_t bytes, bool is_young) {
+  size_t page_size = 4096;
+  uintptr_t base = (uintptr_t)_hrm.reserved().start();
+  // if (addr < base) {
+  //   log_info(gc)("set_young_range: addr < heap base");
+  //   os::abort();
+  // }
+  size_t page_id = (addr - base + page_size - 1) >> 12;
+  size_t end = (addr + bytes - base) >> 12;
+  while (page_id < end) {
+    _free_bitmap_shm[page_id] = 0;
+    _young_bitmap_shm[page_id] = is_young;
+    page_id += 1;
+  }
+  return 0;
+}
+
+int G1CollectedHeap::set_humon_range(uintptr_t addr, size_t bytes) {
+  size_t page_size = 4096;
+  uintptr_t base = (uintptr_t)_hrm.reserved().start();
+  // if (addr < base) {
+  //   log_info(gc)("set_humon_range: addr < heap base");
+  //   os::abort();
+  // }
+  size_t page_id = (addr - base + page_size - 1) >> 12;
+  size_t end = (addr + bytes - base) >> 12;
+  while (page_id < end) {
+    _free_bitmap_shm[page_id] = 1;
+    _young_bitmap_shm[page_id] = 0;
+    page_id += 1;
+  }
+  return 0;
 }
 
 void G1CollectedHeap::post_evacuate_cleanup_1(G1ParScanThreadStateSet* per_thread_states,

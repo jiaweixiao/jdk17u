@@ -155,37 +155,43 @@ void HeapRegion::set_free() {
   report_region_type_change(G1HeapRegionTraceType::Free);
 
   size_t ts = 0, ts_exit_sys = 0, tmp;
-  int count = 0;
+  int count = 1;
 
-  // // [gc breakdown][region majflt][swapout garbage]
-  // // Add a free region.
-  // if (UseProfileRegionMajflt) {
-  //   ts = os::rdtsc();
-  //   if(os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end)) {
-  //     log_info(gc)("[set free] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
-  //     os::abort();
-  //   }
-  //   ts = os::rdtsc() - ts;
-  //   count = 1;
-  // }
+  // [gc breakdown][region majflt][swapout garbage]
+  // Add a free region.
+  if (UseFreeEmptyRegion) {
+    // if (UseProfileRegionMajflt) {
+    //   ts = os::rdtsc();
+    //   if(os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end)) {
+    //     log_info(gc)("[set free] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
+    //     os::abort();
+    //   }
+    //   ts = os::rdtsc() - ts;
+    //   count = 1;
+    // }
 
-  if (UseMadvFree) {
-    ts = os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes, &tmp);
-    ts_exit_sys = tmp;
-    count = 1;
-  } else if (UseMadvFreePage > 0) {
-    uint step = 4096 * UseMadvFreePage;
-    char* addr = (char*)_bottom;
-    char* last_page = (char*)_end - step;
-    while(addr <= last_page) {
-      ts += os::free_page_frames(true, (char*)addr, step, &tmp);
-      ts_exit_sys += tmp;
-      addr += step;
-      count += 1;
+    if (UseMadvFree) {
+      ts = os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes, &tmp);
+      ts_exit_sys = tmp;
+      count = 1;
+    } else if (UseMadvFreePage > 0) {
+      uint step = 4096 * UseMadvFreePage;
+      char* addr = (char*)_bottom;
+      char* last_page = (char*)_end - step;
+      while(addr <= last_page) {
+        ts += os::free_page_frames(true, (char*)addr, step, &tmp);
+        ts_exit_sys += tmp;
+        addr += step;
+        count += 1;
+      }
+    } else if (UseMadvDontneed) {
+      ts = os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes, NULL);
+      count = 1;
     }
-  } else if (UseMadvDontneed) {
-    ts = os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes, NULL);
-    count = 1;
+  }
+
+  if (UseProfileRegionMajflt) {
+    G1CollectedHeap::heap()->set_free_range((uintptr_t)_bottom, HeapRegion::GrainBytes);
   }
 
   if (count > 0) {
@@ -198,27 +204,47 @@ void HeapRegion::set_free() {
 
 void HeapRegion::set_eden() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, true);
+  }
   _type.set_eden();
 }
 
 void HeapRegion::set_eden_pre_gc() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, true);
+  }
   _type.set_eden_pre_gc();
 }
 
 void HeapRegion::set_survivor() {
   report_region_type_change(G1HeapRegionTraceType::Survivor);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, true);
+  }
   _type.set_survivor();
 }
 
 void HeapRegion::move_to_old() {
   if (_type.relabel_as_old()) {
+    // [gc breakdown][region majflt]
+    if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+      G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, false);
+    }
     report_region_type_change(G1HeapRegionTraceType::Old);
   }
 }
 
 void HeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, false);
+  }
   _type.set_old();
 }
 
@@ -237,6 +263,12 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
   assert(top() == bottom(), "should be empty");
 
   report_region_type_change(G1HeapRegionTraceType::StartsHumongous);
+
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_humon_range((uintptr_t)_bottom, HeapRegion::GrainBytes);
+  }
+
   _type.set_starts_humongous();
   _humongous_start_region = this;
 
@@ -249,6 +281,12 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
   assert(first_hr->is_starts_humongous(), "pre-condition");
 
   report_region_type_change(G1HeapRegionTraceType::ContinuesHumongous);
+
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_humon_range((uintptr_t)_bottom, HeapRegion::GrainBytes);
+  }
+
   _type.set_continues_humongous();
   _humongous_start_region = first_hr;
 

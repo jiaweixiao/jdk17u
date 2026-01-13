@@ -111,10 +111,16 @@
   /* gc */                                                                  \
                                                                             \
   product(bool, UseProfileRegionMajflt, false,                              \
-          "Enable profile region majflt")                                   \
+          "Inform page state to kernel via shared memory")                  \
                                                                             \
   product(bool, UseProfileDeadPageInOld, false,                             \
           "Count # of dead pages in old after CM but before Mixed GC")      \
+                                                                            \
+  product(bool, UseProfileSwapsRegionType, false,                           \
+          "Profile heap region types associated with the swapped pages")    \
+                                                                            \
+  product(bool, UseFreeEmptyRegion, false,                                  \
+          "Free empty regions.")                                            \
                                                                             \
   product(bool, UseFreeDeadPage, false,                                     \
           "Free free pages after CM of genshen")                            \
