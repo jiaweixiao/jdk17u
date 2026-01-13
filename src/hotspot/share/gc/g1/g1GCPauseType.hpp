@@ -35,6 +35,7 @@ enum class G1GCPauseType : uint {
   ConcurrentStartUndoGC,
   Cleanup,
   Remark,
+  LogRemoteAndGarbageInOld,
   MixedGC,
   FullGC
 };
@@ -47,6 +48,7 @@ public:
   static void assert_is_young_pause(G1GCPauseType type) {
     assert(type != G1GCPauseType::FullGC, "must be");
     assert(type != G1GCPauseType::Remark, "must be");
+    assert(type != G1GCPauseType::LogRemoteAndGarbageInOld, "must be");
     assert(type != G1GCPauseType::Cleanup, "must be");
   }
 
@@ -80,6 +82,7 @@ public:
                                            "Concurrent Start", // Concurrent Start pauses.
                                            "Cleanup",
                                            "Remark",
+                                           "Log Remote and Garbage in Old",
                                            "Mixed",
                                            "Full" };
     return pause_strings[static_cast<uint>(type)];

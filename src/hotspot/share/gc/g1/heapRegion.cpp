@@ -320,7 +320,8 @@ HeapRegion::HeapRegion(uint hrm_index,
   _surv_rate_group(NULL), _age_index(G1SurvRateGroup::InvalidAgeIndex), _gc_efficiency(-1.0),
   _node_index(G1NUMA::UnknownNodeIndex),
   _madv_count(0),
-  _madv_count_young(0)
+  _madv_count_young(0),
+  _remote_pages(0)
 {
   assert(Universe::on_page_boundary(mr.start()) && Universe::on_page_boundary(mr.end()),
          "invalid space boundaries");
@@ -341,6 +342,17 @@ void HeapRegion::initialize(bool clear_space, bool mangle_space) {
   reset_bot();
 
   hr_clear(false /*clear_space*/);
+}
+
+void HeapRegion::calc_remote_pages() {
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+  size_t remote_pages = 0;
+  for (HeapWord* p = bottom(); p < top(); p += (1 << (12 - LogHeapWordSize))) {
+    if (g1h->is_remote((uintptr_t)p)) {
+      remote_pages++;
+    }
+  }
+  _remote_pages = remote_pages;
 }
 
 void HeapRegion::report_region_type_change(G1HeapRegionTraceType::Type to) {

@@ -287,6 +287,10 @@ private:
   // size_t _madv_cycles;
   // size_t _madv_exit_cycles;
   size_t _madv_count_young;
+  // Save stats of remote pages in regions.
+  // Calculated at the beginning of the concurrent marking.
+  // Logged at the end of the concurrent marking along with the live bytes.
+  size_t _remote_pages;
 
 public:
   HeapRegion(uint hrm_index, G1BlockOffsetTable* bot, MemRegion mr);
@@ -307,6 +311,8 @@ public:
   // size_t get_madv_cycles() const { return _madv_cycles; }
   // size_t get_madv_exit_cycles() const { return _madv_exit_cycles; }
   size_t get_madv_count_young() const { return _madv_count_young; }
+  size_t get_remote_pages() const { return _remote_pages; }
+  void calc_remote_pages();
 
   static int    LogOfHRGrainBytes;
   static int    LogCardsPerRegion;

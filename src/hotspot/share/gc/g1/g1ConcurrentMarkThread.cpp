@@ -163,6 +163,11 @@ bool G1ConcurrentMarkThread::phase_scan_root_regions() {
   return _cm->has_aborted();
 }
 
+void G1ConcurrentMarkThread::phase_calc_remote_pages_in_old() {
+  G1ConcPhaseTimer p(_cm, "Concurrent Cal Remote Pages in Old Regions");
+  _cm->calc_remote_pages_in_old();
+}
+
 bool G1ConcurrentMarkThread::phase_mark_loop() {
   Ticks mark_start = Ticks::now();
   log_info(gc, marking)("Concurrent Mark");
@@ -224,6 +229,11 @@ bool G1ConcurrentMarkThread::subphase_remark() {
   return _cm->has_aborted();
 }
 
+void G1ConcurrentMarkThread::phase_log_remote_and_garbage_in_old() {
+  VM_G1PauseLogRemoteAndGarbageInOld op;
+  VMThread::execute(&op);
+}
+
 bool G1ConcurrentMarkThread::phase_rebuild_remembered_sets() {
   G1ConcPhaseTimer p(_cm, "Concurrent Rebuild Remembered Sets");
   _cm->rebuild_rem_set_concurrently();
@@ -278,8 +288,20 @@ void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
   // Phase 2: Scan root regions.
   if (phase_scan_root_regions()) return;
 
+  // [gc breakdown][region majflt][swapout garbage]
+  // Phase 2.5: Calculate remote pages in old regions.
+  if (UseProfileRegionMajflt && UseProfileRemoteAndGarbageInOld) {
+    phase_calc_remote_pages_in_old();
+  }
+
   // Phase 3: Actual mark loop.
   if (phase_mark_loop()) return;
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Phase 3.5: Log remote pages and garbage bytes in old regions.
+  if (UseProfileRegionMajflt && UseProfileRemoteAndGarbageInOld) {
+    phase_log_remote_and_garbage_in_old();
+  }
 
   // Phase 4: Rebuild remembered sets.
   if (phase_rebuild_remembered_sets()) return;
