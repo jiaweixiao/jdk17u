@@ -60,6 +60,7 @@
   template(G1CollectForAllocation)                \
   template(G1CollectFull)                         \
   template(G1PauseRemark)                         \
+  template(G1PauseLogRemoteAndGarbageInOld)       \
   template(G1PauseCleanup)                        \
   template(G1TryInitiateConcMark)                 \
   template(ZMarkStart)                            \

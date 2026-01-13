@@ -106,6 +106,13 @@ public:
   void work() override;
 };
 
+class VM_G1PauseLogRemoteAndGarbageInOld : public VM_G1PauseConcurrent {
+public:
+VM_G1PauseLogRemoteAndGarbageInOld() : VM_G1PauseConcurrent("Pause Log Remote Pages and Live Bytes in Old Regions") { }
+  VMOp_Type type() const override { return VMOp_G1PauseLogRemoteAndGarbageInOld; }
+  void work() override;
+};
+
 class VM_G1PauseCleanup : public VM_G1PauseConcurrent {
 public:
   VM_G1PauseCleanup() : VM_G1PauseConcurrent("Pause Cleanup") { }

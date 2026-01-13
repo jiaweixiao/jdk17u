@@ -1173,7 +1173,7 @@ void G1Policy::update_gc_pause_time_ratios(G1GCPauseType gc_type, double start_t
   _analytics->compute_pause_time_ratios(end_time_sec, pause_time_ms);
   _analytics->update_recent_gc_times(end_time_sec, pause_time_ms);
 
-  if (gc_type == G1GCPauseType::Cleanup || gc_type == G1GCPauseType::Remark) {
+  if (gc_type == G1GCPauseType::Cleanup || gc_type == G1GCPauseType::Remark || gc_type == G1GCPauseType::LogRemoteAndGarbageInOld) {
     _analytics->append_prev_collection_pause_end_ms(pause_time_ms);
   } else {
     _analytics->set_prev_collection_pause_end_ms(end_time_sec * 1000.0);
@@ -1205,6 +1205,7 @@ void G1Policy::update_time_to_mixed_tracking(G1GCPauseType gc_type,
       break;
     case G1GCPauseType::Cleanup:
     case G1GCPauseType::Remark:
+    case G1GCPauseType::LogRemoteAndGarbageInOld:
     case G1GCPauseType::YoungGC:
     case G1GCPauseType::LastYoungGC:
       _concurrent_start_to_mixed.add_pause(end - start);

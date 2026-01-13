@@ -61,11 +61,19 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   void phase_clear_cld_claimed_marks();
   bool phase_scan_root_regions();
 
+  // [gc breakdown][region majflt][swapout garbage]
+  // Calculate remote pages in old regions.
+  void phase_calc_remote_pages_in_old();
+
   bool phase_mark_loop();
   bool subphase_mark_from_roots();
   bool subphase_preclean();
   bool subphase_delay_to_keep_mmu_before_remark();
   bool subphase_remark();
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Log remote pages and garbage bytes in old regions.
+  void phase_log_remote_and_garbage_in_old();
 
   bool phase_rebuild_remembered_sets();
   bool phase_delay_to_keep_mmu_before_cleanup();

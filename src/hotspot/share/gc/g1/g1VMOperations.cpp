@@ -195,6 +195,11 @@ void VM_G1PauseRemark::work() {
   g1h->concurrent_mark()->remark();
 }
 
+void VM_G1PauseLogRemoteAndGarbageInOld::work() {
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+  g1h->concurrent_mark()->log_remote_and_garbage_in_old();
+}
+
 void VM_G1PauseCleanup::work() {
   G1CollectedHeap* g1h = G1CollectedHeap::heap();
   g1h->concurrent_mark()->cleanup();

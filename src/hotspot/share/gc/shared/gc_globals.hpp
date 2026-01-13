@@ -116,6 +116,9 @@
   product(bool, UseProfileDeadPageInOld, false,                             \
           "Count # of dead pages in old after CM but before Mixed GC")      \
                                                                             \
+  product(bool, UseProfileRemoteAndGarbageInOld, false,                     \
+          "Count # of remote pages and garbage in old regions during CM")   \
+                                                                            \
   product(bool, UseProfileSwapsRegionType, false,                           \
           "Profile heap region types associated with the swapped pages")    \
                                                                             \

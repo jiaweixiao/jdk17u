@@ -910,6 +910,48 @@ void G1ConcurrentMark::scan_root_regions() {
   }
 }
 
+class ParallelTraverseOldRegionsClosure : public HeapRegionClosure {
+public:
+  bool do_heap_region(HeapRegion* hr) {
+    if (hr->is_old()) {
+      hr->calc_remote_pages();
+    }
+    return false;
+  }
+};
+
+class G1CMRemotePagesCalTask : public AbstractGangTask {
+  G1CollectedHeap* _g1h;
+  HeapRegionClaimer _hrclaimer;
+public:
+  G1CMRemotePagesCalTask(G1CollectedHeap* g1h, uint num_workers) :
+    AbstractGangTask("G1 Remote Pages Calculate"), _g1h(g1h), _hrclaimer(num_workers) { }
+
+  void work(uint worker_id) {
+    assert(Thread::current()->is_ConcurrentGC_thread(),
+           "this should only be done by a conc GC thread");
+
+    ParallelTraverseOldRegionsClosure cl;
+    _g1h->heap_region_par_iterate_from_worker_offset(&cl, &_hrclaimer, worker_id);
+  }
+};
+
+void G1ConcurrentMark::calc_remote_pages_in_old() {
+  assert(!has_aborted(), "Aborting before root region scanning is finished not supported.");
+
+  _num_concurrent_workers = MIN2(calc_active_marking_workers(),
+                                  // We distribute work on a per-region basis, so starting
+                                  // more threads than that is useless.
+                                  _g1h->num_regions());
+  assert(_num_concurrent_workers <= _max_concurrent_workers,
+          "Maximum number of marking threads exceeded");
+
+  G1CMRemotePagesCalTask task(_g1h, _num_concurrent_workers);
+  log_debug(gc, ergo)("Running %s using %u workers for %u regions in heap.",
+                      task.name(), _num_concurrent_workers, _g1h->num_regions());
+  _concurrent_workers->run_task(&task, _num_concurrent_workers);
+}
+
 void G1ConcurrentMark::concurrent_cycle_start() {
   _gc_timer_cm->register_gc_start();
 
@@ -1202,6 +1244,24 @@ void G1ConcurrentMark::remark() {
   _remark_times.add((now - start) * 1000.0);
 
   policy->record_concurrent_mark_remark_end();
+}
+
+void G1ConcurrentMark::log_remote_and_garbage_in_old() {
+  assert_at_safepoint_on_vm_thread();
+
+  // If a full collection has happened, we should not continue.
+  if (has_aborted()) {
+    return;
+  }
+
+  // We are safe to use garbage_bytes() here after remark phase.
+  // Because the prev and next bitmaps are swapped during remark phase.
+  for (uint i = 0; i < _g1h->num_regions(); i++) {
+    HeapRegion* hr = _g1h->region_at(i);
+    if (hr->is_old()) {
+      log_info(gc)("Region %u: Remote %lu * 4KB, Garbage %lu Bytes", i, hr->get_remote_pages(), hr->garbage_bytes());
+    }
+  }
 }
 
 class G1ReclaimEmptyRegionsTask : public AbstractGangTask {

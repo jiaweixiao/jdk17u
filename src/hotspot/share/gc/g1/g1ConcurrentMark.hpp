@@ -547,6 +547,9 @@ public:
   // them.
   void scan_root_regions();
 
+  // Calculate remote pages in old regions.
+  void calc_remote_pages_in_old();
+
   // Scan a single root MemRegion to mark everything reachable from it.
   void scan_root_region(const MemRegion* region, uint worker_id);
 
@@ -557,6 +560,11 @@ public:
   void preclean();
 
   void remark();
+
+  // Log remote pages and garbage bytes in old regions.
+  // Must be called after remark phase as we use garbage_bytes() which requires
+  // the prev and next bitmaps are swapped during remark phase.
+  void log_remote_and_garbage_in_old();
 
   void swap_mark_bitmaps();
 
