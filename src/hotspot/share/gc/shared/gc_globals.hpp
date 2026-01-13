@@ -128,6 +128,10 @@
   product(bool, UseMadvDontneed, false,                                     \
           "Free free regions with madvise MADV_DONTNEED")                   \
                                                                             \
+  product(bool, UseFreeAnnotation, false,                                   \
+          "Enable free annotation in java program to mark free primitive "  \
+          "array. E.g. java.lang.reflect.Array.reclaim(arr)")               \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \
