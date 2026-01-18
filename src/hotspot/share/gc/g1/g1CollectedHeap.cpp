@@ -3956,6 +3956,13 @@ void G1CollectedHeap::prepend_to_freelist(FreeRegionList* list) {
 void G1CollectedHeap::decrement_summary_bytes(size_t bytes) {
   decrease_used(bytes);
 }
+
+bool G1CollectedHeap::is_remote(uintptr_t addr) {
+  uintptr_t base = (uintptr_t)_hrm.reserved().start();
+  size_t page_id = (uintptr_t)(addr - base) >> 12;
+  return _remote_bitmap_shm[page_id];
+}
+
 int G1CollectedHeap::set_free_range(uintptr_t addr, size_t bytes) {
   size_t page_size = 4096;
   uintptr_t base = (uintptr_t)_hrm.reserved().start();
