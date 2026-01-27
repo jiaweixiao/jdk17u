@@ -122,6 +122,9 @@ void G1ConcurrentMarkThread::run_service() {
     FormatBuffer<128> title("Concurrent %s Cycle", _state == FullMark ? "Mark" : "Undo");
     GCTraceConcTime(Info, gc) tt(title);
 
+    // [gc breakdown]
+    os::dump_accum_thread_majflt_minflt_and_cputime("beforeConcCycle");
+
     concurrent_cycle_start();
 
     if (_state == FullMark) {
@@ -132,6 +135,8 @@ void G1ConcurrentMarkThread::run_service() {
     }
 
     concurrent_cycle_end(_state == FullMark && !_cm->has_aborted());
+  
+    os::dump_accum_thread_majflt_minflt_and_cputime("afterConcCycle");
 
     _vtime_accum = (os::elapsedVTime() - _vtime_start);
   }
@@ -185,7 +190,11 @@ bool G1ConcurrentMarkThread::phase_mark_loop() {
     if (subphase_delay_to_keep_mmu_before_remark()) return true;
 
     // Subphase 4: Remark pause
+    // [gc breakdown]
+    GCMajfltStats gc_majflt_stats;
+    gc_majflt_stats.start();
     if (subphase_remark()) return true;
+    gc_majflt_stats.end_and_log("remark");
 
     // Check if we need to restart the marking loop.
     if (!mark_loop_needs_restart()) break;
@@ -310,7 +319,11 @@ void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
   if (phase_delay_to_keep_mmu_before_cleanup()) return;
 
   // Phase 6: Cleanup pause
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   if (phase_cleanup()) return;
+  gc_majflt_stats.end_and_log("cleanup");
 
   // Phase 7: Clear bitmap for next mark.
   phase_clear_bitmap_for_next_mark();
