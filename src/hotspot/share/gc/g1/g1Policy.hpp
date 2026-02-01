@@ -111,6 +111,11 @@ class G1Policy: public CHeapObj<mtGC> {
 
   G1ConcurrentStartToMixedTimeTracker _concurrent_start_to_mixed;
 
+  // Store GC cause for concurrent cycle. This is used to skip evacuation for periodic
+  // GCs triggered by -XX:G1PeriodicGCInterval and -XX:+G1PeriodicGCInvokesConcurrent.
+  // We can not use _g1h->gc_cause() directly because it is reset by cleanup time
+  GCCause::Cause _concurrent_cycle_gc_cause;
+
   bool should_update_surv_rate_group_predictors() {
     return collector_state()->in_young_only_phase() && !collector_state()->mark_or_rebuild_in_progress();
   }
