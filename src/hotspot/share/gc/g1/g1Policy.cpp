@@ -1107,6 +1107,7 @@ void G1Policy::decide_on_conc_mark_initiation() {
 }
 
 void G1Policy::record_concurrent_mark_cleanup_end(bool has_rebuilt_remembered_sets) {
+  _g1h->record_concurrent_cycle_end();
   bool mixed_gc_pending = false;
   if (has_rebuilt_remembered_sets) {
     // [Skipswap]

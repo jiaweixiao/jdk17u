@@ -149,6 +149,9 @@
   product(bool, UsePeriodicTraceOnly, false,                                \
           "Trigger periodic GCs only for tracing, and skip evacuation")     \
                                                                             \
+  product(bool, UsePeriodicTraceCPUCheck, false,                            \
+          "Trigger Periodic GCs only if CPU is enough")                     \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \

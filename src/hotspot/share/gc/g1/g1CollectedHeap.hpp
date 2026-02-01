@@ -152,6 +152,9 @@ class G1CollectedHeap : public CollectedHeap {
   friend class G1HeapPrinterMark;
   friend class HeapRegionClaimer;
 
+  // To call g1h->abort_concurrent_cycle()
+  friend class G1PeriodicGCTask;
+
   // Testing classes.
   friend class G1CheckRegionAttrTableClosure;
 
@@ -163,6 +166,7 @@ private:
   G1CardTable* _card_table;
 
   Ticks _collection_pause_end;
+  Ticks _concurrent_cycle_end;
 
   SoftRefPolicy      _soft_ref_policy;
 
@@ -1346,6 +1350,8 @@ public:
   virtual size_t max_capacity() const;
 
   Tickspan time_since_last_collection() const { return Ticks::now() - _collection_pause_end; }
+  Tickspan time_since_last_concurrent_gc() const { return Ticks::now() - _concurrent_cycle_end; }
+  void record_concurrent_cycle_end() { _concurrent_cycle_end = Ticks::now(); }
 
   // Convenience function to be used in situations where the heap type can be
   // asserted to be this type.
