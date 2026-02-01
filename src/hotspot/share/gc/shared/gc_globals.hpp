@@ -141,6 +141,11 @@
           "Enable free annotation in java program to mark free primitive "  \
           "array. E.g. java.lang.reflect.Array.reclaim(arr)")               \
                                                                             \
+  product(bool, UseTracePageout, false,                                     \
+          "When G1 concurrent marking workers finish scanning a claimed "   \
+          "region, they will inform the Linux kernel that the pages in "    \
+          "the scanned area can be swapped out.")                           \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \
