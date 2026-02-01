@@ -29,9 +29,31 @@
 
 // Task handling periodic GCs
 class G1PeriodicGCTask : public G1ServiceTask {
+  static const uint CPU_UTIL_HISTORY_SIZE = 3;
+  
+  // History of CPU availability checks (true = enough free cores, false = not enough)
+  double _cpu_util_history[CPU_UTIL_HISTORY_SIZE];
+  uint _history_index;  // Current position in circular buffer
+  uint _history_count;  // Number of valid entries in history (0 to CPU_UTIL_HISTORY_SIZE)
+  
+  // [Skipswap] CPU utilization tracking
+  double _last_wall_time_sec;  // Wall time of last check (in seconds)
+  jlong _last_process_cpu_time_ns;  // Process CPU time of last check (in nanoseconds)
+  bool _cpu_tracking_initialized;  // Whether we have valid initial values
+  
+  bool should_abort_periodic_gc();
   bool should_start_periodic_gc();
   void check_for_periodic_gc();
 
+  // [Skipswap] Sysmtem and process status tracking methods
+  jlong get_process_cpu_time_ns();  // Sum CPU time of all threads
+  double check_cpu_util();
+  void record_cpu_util(double util);
+  bool has_sufficient_cpu_history(uint required_count) const;
+  bool has_sufficient_cpu();
+  bool is_cpu_pressure_high_history(uint required_count) const;
+  bool is_cpu_pressure_high();
+  
 public:
   G1PeriodicGCTask(const char* name);
   virtual void execute();

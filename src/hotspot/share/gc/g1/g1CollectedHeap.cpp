@@ -1455,6 +1455,7 @@ G1CollectedHeap::G1CollectedHeap() :
   _workers(NULL),
   _card_table(NULL),
   _collection_pause_end(Ticks::now()),
+  _concurrent_cycle_end(Ticks::now()),
   _soft_ref_policy(),
   _old_set("Old Region Set", new OldRegionSetChecker()),
   _archive_set("Archive Region Set", new ArchiveRegionSetChecker()),
