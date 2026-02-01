@@ -2107,6 +2107,19 @@ void G1CMTask::update_region_limit() {
 
 void G1CMTask::giveup_current_region() {
   assert(_curr_region != NULL, "invariant");
+
+  // Call pageout_async for the scanned area (bottom to next_top_at_mark_start)
+  if (UseTracePageout) {
+    HeapWord* bottom = _curr_region->bottom();
+    HeapWord* limit = _region_limit;
+    
+    if (limit > bottom) {
+      char* addr = (char*)bottom;
+      size_t bytes = byte_size(bottom, limit);
+      os::pageout_async(addr, bytes, NULL);
+    }
+  }
+
   clear_region_fields();
 }
 

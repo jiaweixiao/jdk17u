@@ -1354,6 +1354,18 @@ size_t os::free_page_frames(bool lazy, char *addr, size_t bytes, size_t *exit_sy
   return ts_end - ts_stt;
 }
 
+size_t os::pageout_async(char *addr, size_t bytes, size_t *exit_sys) {
+  size_t ts_stt = 0, ts_exit = 0, ts_end = 0;
+  ts_stt = os::rdtsc();
+  // MADV_PAGEOUT_ASYNC is 22
+  ts_exit = syscall(455, addr, bytes, 22, ts_stt);
+  ts_end = os::rdtsc();
+  if (exit_sys) *exit_sys = ts_end - ts_exit;
+
+  // in cycles
+  return ts_end - ts_stt;
+}
+
 // profile majflt by region support
 // skip swap garbage
 int os::adc_advise_init_bitmap(uintptr_t base, size_t region_number, size_t region_size) {
