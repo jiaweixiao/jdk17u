@@ -74,6 +74,7 @@ G1Policy::G1Policy(STWGCTimer* gc_timer) :
   _rs_length_prediction(0),
   _pending_cards_at_gc_start(0),
   _concurrent_start_to_mixed(),
+  _concurrent_cycle_gc_cause(GCCause::_no_gc),
   _collection_set(NULL),
   _g1h(NULL),
   _phase_times_timer(gc_timer),
@@ -1059,6 +1060,10 @@ void G1Policy::decide_on_conc_mark_initiation() {
     // one if not inhibited for some reason.
 
     GCCause::Cause cause = _g1h->gc_cause();
+    // Store the cause for concurrent cycle to skip evacuation for periodic GCs
+    // triggered by -XX:G1PeriodicGCInterval and -XX:+G1PeriodicGCInvokesConcurrent.
+    // We can not use _g1h->gc_cause() directly because it is reset by cleanup time.
+    _concurrent_cycle_gc_cause = cause;
     if ((cause != GCCause::_wb_breakpoint) &&
         ConcurrentGCBreakpoints::is_controlled()) {
       log_debug(gc, ergo)("Do not initiate concurrent cycle (whitebox controlled)");
@@ -1104,9 +1109,21 @@ void G1Policy::decide_on_conc_mark_initiation() {
 void G1Policy::record_concurrent_mark_cleanup_end(bool has_rebuilt_remembered_sets) {
   bool mixed_gc_pending = false;
   if (has_rebuilt_remembered_sets) {
-    G1CollectionSetCandidates* candidates = G1CollectionSetChooser::build(_g1h->workers(), _g1h->num_regions());
-    _collection_set->set_candidates(candidates);
-    mixed_gc_pending = next_gc_should_be_mixed("request mixed gcs", "request young-only gcs");
+    // [Skipswap]
+    // HACK: Skip evacuation for periodic GCs triggered by -XX:G1PeriodicGCInterval
+    // and -XX:+G1PeriodicGCInvokesConcurrent
+    // We do not use _g1h->gc_cause() directly because it is reset by cleanup time.
+    if (UsePeriodicTraceOnly &&
+        _concurrent_cycle_gc_cause == GCCause::_g1_periodic_collection) {
+      log_info(gc)("Skipping evacuation after concurrent marking");
+      // Skip building candidates entirely - no need to scan regions
+      mixed_gc_pending = false;
+    } else {
+      // Normal path: build candidates for mixed GC
+      G1CollectionSetCandidates* candidates = G1CollectionSetChooser::build(_g1h->workers(), _g1h->num_regions());
+      _collection_set->set_candidates(candidates);
+      mixed_gc_pending = next_gc_should_be_mixed("request mixed gcs", "request young-only gcs");
+    }
   }
 
   if (log_is_enabled(Trace, gc, liveness)) {

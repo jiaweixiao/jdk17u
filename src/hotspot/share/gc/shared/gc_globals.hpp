@@ -147,6 +147,9 @@
           "region, they will inform the Linux kernel that the pages in "    \
           "the scanned area can be swapped out.")                           \
                                                                             \
+  product(bool, UsePeriodicTraceOnly, false,                                \
+          "Trigger periodic GCs only for tracing, and skip evacuation")     \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \
