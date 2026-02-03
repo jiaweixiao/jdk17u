@@ -46,6 +46,7 @@
 #include "logging/log.hpp"
 #include "runtime/biasedLocking.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 
 static void clear_and_activate_derived_pointers() {
@@ -169,6 +170,75 @@ public:
   }
 };
 
+class FreeDeadPagesClosure : public HeapRegionClosure {
+  G1CollectedHeap* _heap;
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Find dead page in region.    
+  // bins: 2^0, ..., 2^log2i(4KB pages per region)
+  uint* _dead_ranges_log2;
+  uint _dead_ranges_len;
+  size_t _dead_pages_count;
+  
+public:
+  FreeDeadPagesClosure(G1CollectedHeap* heap) : _heap(heap) {
+    if (UseProfileDeadPageInOld) {
+      // bins: 2^0, ..., 2^log2i(4KB pages per region)
+      _dead_ranges_len = log2i(HeapRegion::GrainBytes >> 12) + 1;
+      _dead_ranges_log2 = NEW_C_HEAP_ARRAY(uint, _dead_ranges_len, mtGC);
+      memset(_dead_ranges_log2, 0, sizeof(uint) * _dead_ranges_len);
+      _dead_pages_count = 0;
+    }
+  }
+
+  ~FreeDeadPagesClosure() {
+    if (UseProfileDeadPageInOld) {
+      dump_dead_ranges();
+      FREE_C_HEAP_ARRAY(uint, _dead_ranges_log2);
+    }
+  }
+  
+  bool do_heap_region(HeapRegion* hr) {
+    // Skip free, closed archive, and pinned regions
+    if (hr->is_free() || hr->is_closed_archive() || hr->is_pinned()) {
+      return false;
+    }
+
+    // Get the end of live objects (old compaction_top value)
+    uintptr_t page_stt = (((uintptr_t)hr->top()) + 4096 -1) >> 12;
+    uintptr_t page_end = ((uintptr_t)hr->end()) >> 12;
+    size_t dead_pages = page_end - page_stt;
+
+    // Calculate dead page range
+    if (dead_pages > 0) {
+      assert(log2i(dead_pages) < (int)_dead_ranges_len, "dead range len %d, %d", dead_pages, _dead_ranges_len);
+      // Account consecutive dead pages per worker.
+      _dead_ranges_log2[log2i(dead_pages)] += 1;
+      _dead_pages_count += dead_pages;
+
+      // Free dead pages based on flags
+      if (UseFreeDeadPage) {
+        if (UseProfileRegionMajflt) {
+          _heap->set_free_range(page_stt << 12, dead_pages << 12);
+        } else if (UseMadvFree) {
+          os::free_page_frames(true, (char*)(page_stt << 12), dead_pages << 12, NULL);
+        } else if (UseMadvDontneed) {
+          os::free_page_frames(false, (char*)(page_stt << 12), dead_pages << 12, NULL);
+        }
+      }
+    }
+
+    return false;
+  }
+
+  void dump_dead_ranges() {
+    for (uint i = 0; i < _dead_ranges_len; i++)
+      if (_dead_ranges_log2[i] > 0)
+        log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
+    log_info(gc)("Dead Pages Count: %lu", _dead_pages_count);
+  }
+};
+
 void G1FullCollector::prepare_collection() {
   _heap->policy()->record_full_collection_start();
 
@@ -207,6 +277,14 @@ void G1FullCollector::collect() {
 }
 
 void G1FullCollector::complete_collection() {
+  // Free dead pages based on compaction_top
+  // Note: top() contains the old compaction_top value after 
+  // reset_compacted_after_full_gc()
+  if (UseProfileDeadPageInOld) {
+    FreeDeadPagesClosure free_dead_pages(_heap);
+    _heap->heap_region_iterate(&free_dead_pages);
+  }
+
   // Restore all marks.
   restore_marks();
 

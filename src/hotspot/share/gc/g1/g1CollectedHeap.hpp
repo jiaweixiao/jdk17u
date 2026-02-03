@@ -1209,6 +1209,7 @@ public:
   volatile bool* get_young_bitmap_shm() { return _young_bitmap_shm; };
   size_t get_shm_size_bytes() { return _bitmap_shm_size_bytes; };
   bool is_remote(uintptr_t addr);
+  int set_alloc_range(uintptr_t addr, size_t bytes);
   int set_free_range(uintptr_t addr, size_t bytes);
   int set_young_range(uintptr_t addr, size_t bytes, bool is_young);
   int set_humon_range(uintptr_t addr, size_t bytes);

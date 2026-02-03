@@ -114,7 +114,8 @@
           "Inform page state to kernel via shared memory")                  \
                                                                             \
   product(bool, UseProfileDeadPageInOld, false,                             \
-          "Count # of dead pages in old after CM but before Mixed GC")      \
+          "Count # of dead pages in old after tracing of CM and "           \
+          "compaction of full gc")                                          \
                                                                             \
   product(bool, UseProfileRemoteAndGarbageInOld, false,                     \
           "Count # of remote pages and garbage in old regions during CM")   \
@@ -126,7 +127,7 @@
           "Free empty regions.")                                            \
                                                                             \
   product(bool, UseFreeDeadPage, false,                                     \
-          "Free free pages after CM of genshen")                            \
+          "Free free pages after CM of G1")                                 \
                                                                             \
   product(bool, UseMadvFree, false,                                         \
           "Free free regions with madvise MADV_FREE")                       \

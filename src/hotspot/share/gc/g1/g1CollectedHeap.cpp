@@ -200,6 +200,18 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(HeapRegion* first_hr,
   uint first = first_hr->hrm_index();
   uint last = first + num_regions - 1;
 
+  // [gc breakdown][region majflt][swapout garbage]
+  // Alloc these regions.
+  if (UseProfileRegionMajflt) {
+    for (uint i = first; i <= last; ++i) {
+      HeapRegion *hr = region_at(i);
+      if(set_alloc_range((uintptr_t)hr->bottom(), HeapRegion::GrainBytes)) {
+        log_info(gc)("[hum obj init] fails set_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(hr->bottom()), p2i(hr->end()));
+        os::abort();
+      }
+    }
+  }
+
   // We need to initialize the region(s) we just discovered. This is
   // a bit tricky given that it can happen concurrently with
   // refinement threads refining cards on these regions and
@@ -3978,6 +3990,22 @@ bool G1CollectedHeap::is_remote(uintptr_t addr) {
   uintptr_t base = (uintptr_t)_hrm.reserved().start();
   size_t page_id = (uintptr_t)(addr - base) >> 12;
   return _remote_bitmap_shm[page_id];
+}
+
+int G1CollectedHeap::set_alloc_range(uintptr_t addr, size_t bytes) {
+  size_t page_size = 4096;
+  uintptr_t base = (uintptr_t)_hrm.reserved().start();
+  // if (addr < base) {
+  //   log_info(gc)("set_alloc_range: addr < heap base");
+  //   os::abort();
+  // }
+  size_t page_id = (addr - base) >> 12;
+  size_t end = (addr + bytes - base + page_size - 1) >> 12;
+  while (page_id < end) {
+    _alloc_bitmap_shm[page_id] = 1;
+    page_id += 1;
+  }
+  return 0;
 }
 
 int G1CollectedHeap::set_free_range(uintptr_t addr, size_t bytes) {
