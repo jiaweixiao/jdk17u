@@ -117,6 +117,9 @@
           "Count # of dead pages in old after tracing of CM and "           \
           "compaction of full gc")                                          \
                                                                             \
+  product(bool, UseProfileSwapsRegionType, false,                           \
+          "Profile heap region types associated with the swapped pages")    \
+                                                                            \
   product(bool, UseFreeEmptyRegion, false,                                  \
           "Free empty regions.")                                            \
                                                                             \

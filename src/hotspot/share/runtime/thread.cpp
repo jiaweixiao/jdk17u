@@ -3487,6 +3487,12 @@ void Threads::destroy_vm() {
         g1h->get_shm_size_bytes());
       os::adc_advise_unmap_shm((void*)(g1h->get_remote_bitmap_shm()),
         g1h->get_shm_size_bytes());
+      if (UseProfileSwapsRegionType) {
+        os::adc_advise_unmap_shm((void*)(g1h->get_free_bitmap_shm()),
+          g1h->get_shm_size_bytes());
+        os::adc_advise_unmap_shm((void*)(g1h->get_young_bitmap_shm()),
+          g1h->get_shm_size_bytes());
+      }
       log_info(gc,heap,exit)("unmap bitmap shared memory");
     }
   }

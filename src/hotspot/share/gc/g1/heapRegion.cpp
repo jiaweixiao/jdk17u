@@ -194,27 +194,47 @@ void HeapRegion::set_free() {
 
 void HeapRegion::set_eden() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, true);
+  }
   _type.set_eden();
 }
 
 void HeapRegion::set_eden_pre_gc() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, true);
+  }
   _type.set_eden_pre_gc();
 }
 
 void HeapRegion::set_survivor() {
   report_region_type_change(G1HeapRegionTraceType::Survivor);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, true);
+  }
   _type.set_survivor();
 }
 
 void HeapRegion::move_to_old() {
   if (_type.relabel_as_old()) {
+    // [gc breakdown][region majflt]
+    if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+      G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, false);
+    }
     report_region_type_change(G1HeapRegionTraceType::Old);
   }
 }
 
 void HeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_young_range((uintptr_t)_bottom, HeapRegion::GrainBytes, false);
+  }
   _type.set_old();
 }
 
@@ -233,6 +253,12 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
   assert(top() == bottom(), "should be empty");
 
   report_region_type_change(G1HeapRegionTraceType::StartsHumongous);
+
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_humon_range((uintptr_t)_bottom, HeapRegion::GrainBytes);
+  }
+
   _type.set_starts_humongous();
   _humongous_start_region = this;
 
@@ -245,6 +271,12 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
   assert(first_hr->is_starts_humongous(), "pre-condition");
 
   report_region_type_change(G1HeapRegionTraceType::ContinuesHumongous);
+
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt && UseProfileSwapsRegionType) {
+    G1CollectedHeap::heap()->set_humon_range((uintptr_t)_bottom, HeapRegion::GrainBytes);
+  }
+
   _type.set_continues_humongous();
   _humongous_start_region = first_hr;
 
