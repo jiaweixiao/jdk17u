@@ -48,6 +48,17 @@ inline HeapWord* HeapRegion::allocate_impl(size_t min_word_size,
     set_top(new_top);
     assert(is_object_aligned(obj) && is_object_aligned(new_top), "checking alignment");
     *actual_size = want_to_allocate;
+
+    // [gc breakdown][region majflt][swapout garbage]
+    if (UseProfileRegionMajflt) {
+      // // DEBUG
+      // Copy::zero_to_words(obj, want_to_allocate);
+      if(G1CollectedHeap::heap()->set_alloc_range((uintptr_t)obj, want_to_allocate * HeapWordSize)) {
+        log_info(gc)("[allocate] fails set_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(obj), p2i(new_top));
+        os::abort();
+      }
+    }
+
     return obj;
   } else {
     return NULL;
@@ -70,6 +81,17 @@ inline HeapWord* HeapRegion::par_allocate_impl(size_t min_word_size,
       if (result == obj) {
         assert(is_object_aligned(obj) && is_object_aligned(new_top), "checking alignment");
         *actual_size = want_to_allocate;
+
+        // [gc breakdown][region majflt][swapout garbage]
+        if (UseProfileRegionMajflt) {
+          // // DEBUG
+          // Copy::zero_to_words(obj, want_to_allocate);
+          if(G1CollectedHeap::heap()->set_alloc_range((uintptr_t)obj, want_to_allocate * HeapWordSize)) {
+            log_info(gc)("[par_allocate] fails set_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(obj), p2i(new_top));
+            os::abort();
+          }
+        }
+
         return obj;
       }
     } else {

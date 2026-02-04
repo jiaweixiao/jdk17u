@@ -58,6 +58,10 @@
 #include "utilities/copy.hpp"
 #include "utilities/events.hpp"
 
+#if INCLUDE_G1GC
+#include "gc/g1/g1CollectedHeap.inline.hpp"
+#endif // INCLUDE_G1GC
+
 class ClassLoaderData;
 
 size_t CollectedHeap::_filler_array_max_size = 0;
@@ -442,6 +446,17 @@ CollectedHeap::fill_with_object_impl(HeapWord* start, size_t words, bool zap)
 {
   assert(words <= filler_array_max_size(), "too big for a single object");
 
+  // [gc breakdown][region majflt][swapout garbage]
+  if (UseProfileRegionMajflt && words > 0) {
+  #if INCLUDE_G1GC
+    if(G1CollectedHeap::heap()->set_alloc_range((uintptr_t)start, words * HeapWordSize)) {
+      log_info(gc)("[fill_with_object_impl] fails set_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+        p2i(start), p2i(start + words));
+      os::abort();
+    }
+  #endif // INCLUDE_G1GC
+  }
+
   if (words >= filler_array_min_size()) {
     fill_with_array(start, words, zap);
   } else if (words > 0) {
@@ -462,6 +477,17 @@ void CollectedHeap::fill_with_objects(HeapWord* start, size_t words, bool zap)
 {
   DEBUG_ONLY(fill_args_check(start, words);)
   HandleMark hm(Thread::current());  // Free handles before leaving.
+
+  // [gc breakdown][region majflt][swapout garbage]
+  if (UseProfileRegionMajflt && words > 0) {
+    #if INCLUDE_G1GC
+    if(G1CollectedHeap::heap()->set_alloc_range((uintptr_t)start, words * HeapWordSize)) {
+      log_info(gc)("[fill_with_objects] fails set_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+        p2i(start), p2i(start + words));
+      os::abort();
+    }
+    #endif // INCLUDE_G1GC
+  }
 
   // Multiple objects may be required depending on the filler array maximum size. Fill
   // the range up to that with objects that are filler_array_max_size sized. The

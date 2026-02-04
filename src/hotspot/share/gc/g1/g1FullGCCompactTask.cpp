@@ -69,6 +69,16 @@ size_t G1FullGCCompactTask::G1CompactRegionClosure::apply(oop obj) {
   // copy object and reinit its mark
   HeapWord* obj_addr = cast_from_oop<HeapWord*>(obj);
   assert(obj_addr != destination, "everything in this pass should be moving");
+
+  // [gc breakdown][region majflt][swapout garbage]
+  if (UseProfileRegionMajflt) {
+    // conjoint copy, can not init to zero
+    if(G1CollectedHeap::heap()->set_alloc_range((uintptr_t)destination, size * HeapWordSize)) {
+      log_info(gc)("[G1CompactRegionClosure] fails set_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+        p2i(obj_addr), p2i(destination));
+      os::abort();
+    }
+  }
   Copy::aligned_conjoint_words(obj_addr, destination, size);
   cast_to_oop(destination)->init_mark();
   assert(cast_to_oop(destination)->klass() != NULL, "should have a class");

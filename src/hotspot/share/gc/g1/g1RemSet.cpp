@@ -1751,6 +1751,8 @@ class G1RebuildRemSetTask: public AbstractGangTask {
     G1ConcurrentMark* _cm;
     G1RebuildRemSetClosure _update_cl;
 
+    G1CollectedHeap* _g1h;
+
     // [gc breakdown][region majflt][swapout garbage]
     // Find dead page in region.    
     // bins: 2^0, ..., 2^log2i(4KB pages per region)
@@ -1858,9 +1860,10 @@ class G1RebuildRemSetTask: public AbstractGangTask {
           log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
     }
 
-    void profile_dead_range_in_region(const G1CMBitMap* const bitmap,
-                                      HeapWord* const bottom,
-                                      HeapWord* const limit) {
+    // Option 2: use mark bitmap to find consecutive dead pages.
+    void profile_dead_range_in_region_with_bitmap(const G1CMBitMap* const bitmap,
+                                                  HeapWord* const bottom,
+                                                  HeapWord* const limit) {
       if (((uintptr_t)limit) - ((uintptr_t)bottom) < 4096)
         return;
 
@@ -1891,10 +1894,10 @@ class G1RebuildRemSetTask: public AbstractGangTask {
               // Copy::zero_to_bytes((char*)(dead_page_start << 12), tmp_dead_pages << 12);
 
               if (UseProfileRegionMajflt) {
-                // if(os::adc_advise_free_range(dead_page_start << 12, live_page_start << 12)) {
-                //   log_info(gc)("[account_dead_ranges] fails adc_advise_free_range, stt: " PTR_FORMAT " end: " PTR_FORMAT, dead_page_start << 12, live_page_start << 12);
-                //   os::abort();
-                // }
+                if(_g1h->set_free_range(dead_page_start << 12, tmp_dead_pages << 12)) {
+                  log_info(gc)("[profile_dead_range_in_region_with_bitmap] fails set_free_range, stt: " PTR_FORMAT " end: " PTR_FORMAT, dead_page_start << 12, live_page_start << 12);
+                  os::abort();
+                }
               } else if (UseMadvFree) {
                 os::free_page_frames(true,
                   (char*)(dead_page_start << 12), tmp_dead_pages << 12, NULL);
@@ -1962,7 +1965,8 @@ public:
                                     uint worker_id) :
       HeapRegionClosure(),
       _cm(cm),
-      _update_cl(g1h, worker_id) {
+      _update_cl(g1h, worker_id),
+      _g1h(g1h) {
       if (UseProfileDeadPageInOld) {
         // bins: 2^0, ..., 2^log2i(4KB pages per region)
         _dead_ranges_len = log2i(HeapRegion::GrainBytes >> 12) + 1;
@@ -1996,7 +2000,7 @@ public:
       HeapWord* const top_at_mark_start = hr->prev_top_at_mark_start();
 
       if (UseProfileDeadPageInOld && !hr->is_humongous()) {
-        profile_dead_range_in_region(_cm->prev_mark_bitmap(),
+        profile_dead_range_in_region_with_bitmap(_cm->prev_mark_bitmap(),
                                      hr->bottom(),
                                      top_at_mark_start);    
         _cm->do_yield_check();
