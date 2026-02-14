@@ -1297,13 +1297,13 @@ class G1ReclaimEmptyRegionsTask : public AbstractGangTask {
         hr->set_containing_set(NULL);
         if (hr->is_humongous()) {
           _humongous_regions_removed++;
-          _g1h->free_humongous_region(hr, _local_cleanup_list);
+          _g1h->free_humongous_region_profiling(hr, _local_cleanup_list, 2);
         } else if (hr->is_open_archive()) {
           _archive_regions_removed++;
-          _g1h->free_region(hr, _local_cleanup_list);
+          _g1h->free_region_profiling(hr, _local_cleanup_list, 2);
         } else {
           _old_regions_removed++;
-          _g1h->free_region(hr, _local_cleanup_list);
+          _g1h->free_region_profiling(hr, _local_cleanup_list, 2);
         }
         hr->clear_cardtable();
         _g1h->concurrent_mark()->clear_statistics_in_region(hr->hrm_index());

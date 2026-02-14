@@ -178,8 +178,13 @@ class FreeDeadPagesClosure : public HeapRegionClosure {
   // bins: 2^0, ..., 2^log2i(4KB pages per region)
   uint* _dead_ranges_log2;
   uint _dead_ranges_len;
+  // It counts dead pages found in last tracing
   size_t _dead_pages_count;
-  
+  // It counts dead pages that are live since last tracing
+  size_t _live_to_deads;
+  // It counts dead pages that are live since last tracing and in remote
+  size_t _remote_live_to_deads;
+
 public:
   FreeDeadPagesClosure(G1CollectedHeap* heap) : _heap(heap) {
     if (UseProfileDeadPageInOld) {
@@ -188,6 +193,8 @@ public:
       _dead_ranges_log2 = NEW_C_HEAP_ARRAY(uint, _dead_ranges_len, mtGC);
       memset(_dead_ranges_log2, 0, sizeof(uint) * _dead_ranges_len);
       _dead_pages_count = 0;
+      _live_to_deads = 0;
+      _remote_live_to_deads = 0;
     }
   }
 
@@ -219,7 +226,11 @@ public:
       // Free dead pages based on flags
       if (UseFreeDeadPage) {
         if (UseProfileRegionMajflt) {
-          _heap->set_free_range(page_stt << 12, dead_pages << 12);
+          size_t lives = 0;
+          size_t remotes = 0;
+          _heap->set_free_range_profiling(page_stt << 12, dead_pages << 12, &lives, &remotes);
+          _live_to_deads += lives;
+          _remote_live_to_deads += remotes;
         } else if (UseMadvFree) {
           os::free_page_frames(true, (char*)(page_stt << 12), dead_pages << 12, NULL);
         } else if (UseMadvDontneed) {
@@ -236,6 +247,8 @@ public:
       if (_dead_ranges_log2[i] > 0)
         log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
     log_info(gc)("Dead Pages Count: %lu", _dead_pages_count);
+    log_info(gc)("Live to Dead Pages: %lu, %lu (remote)", 
+            _live_to_deads, _remote_live_to_deads);
   }
 };
 

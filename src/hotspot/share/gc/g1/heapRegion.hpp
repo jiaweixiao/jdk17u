@@ -292,6 +292,18 @@ private:
   // Logged at the end of the concurrent marking along with the live bytes.
   size_t _remote_pages;
 
+  // It counts dead pages found since last tracing
+  size_t _live_to_deads;
+  // It counts dead pages found since last tracing and in remote
+  size_t _remote_live_to_deads;
+  // The above counters of empty regions in different gc
+  size_t _live_to_deads_young;
+  size_t _remote_live_to_deads_young;
+  size_t _live_to_deads_conc;
+  size_t _remote_live_to_deads_conc;
+  size_t _live_to_deads_full;
+  size_t _remote_live_to_deads_full;
+
 public:
   HeapRegion(uint hrm_index, G1BlockOffsetTable* bot, MemRegion mr);
 
@@ -313,6 +325,15 @@ public:
   size_t get_madv_count_young() const { return _madv_count_young; }
   size_t get_remote_pages() const { return _remote_pages; }
   void calc_remote_pages();
+
+  size_t get_live_to_deads() const { return _live_to_deads; }
+  size_t get_remote_live_to_deads() const { return _remote_live_to_deads; }
+  size_t get_live_to_deads_young() const { return _live_to_deads_young; }
+  size_t get_remote_live_to_deads_young() const { return _remote_live_to_deads_young; }
+  size_t get_live_to_deads_conc() const { return _live_to_deads_conc; }
+  size_t get_remote_live_to_deads_conc() const { return _remote_live_to_deads_conc; }
+  size_t get_live_to_deads_full() const { return _live_to_deads_full; }
+  size_t get_remote_live_to_deads_full() const { return _remote_live_to_deads_full; }
 
   static int    LogOfHRGrainBytes;
   static int    LogCardsPerRegion;
@@ -434,6 +455,11 @@ public:
   bool is_closed_archive() const { return _type.is_closed_archive(); }
 
   void set_free();
+  // @type
+  //  1: young evac
+  //  2: conc remark
+  //  3: full gc
+  void set_free_profiling(int type);
 
   void set_eden();
   void set_eden_pre_gc();
@@ -512,7 +538,11 @@ public:
   // Reset the HeapRegion to default values and clear its remembered set.
   // If clear_space is true, clear the HeapRegion's memory.
   // Callers must ensure this is not called by multiple threads at the same time.
-  void hr_clear(bool clear_space);
+  // @type
+  //  1: young evac
+  //  2: conc remark
+  //  3: full gc
+  void hr_clear_profiling(bool clear_space, int type);
   // Clear the card table corresponding to this region.
   void clear_cardtable();
 

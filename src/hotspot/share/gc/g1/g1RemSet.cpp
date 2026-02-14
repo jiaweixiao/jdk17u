@@ -1758,8 +1758,12 @@ class G1RebuildRemSetTask: public AbstractGangTask {
     // bins: 2^0, ..., 2^log2i(4KB pages per region)
     uint* _dead_ranges_log2;
     uint _dead_ranges_len;
-
+    // It counts dead pages found in last tracing
     size_t _dead_pages_count;
+    // It counts dead pages found since last tracing
+    size_t _live_to_deads;
+    // It counts dead pages found since last tracing and in remote
+    size_t _remote_live_to_deads;
 
     // Applies _update_cl to the references of the given object, limiting objArrays
     // to the given MemRegion. Returns the amount of words actually scanned.
@@ -1861,6 +1865,8 @@ class G1RebuildRemSetTask: public AbstractGangTask {
         if (_dead_ranges_log2[i] > 0)
           log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
       log_info(gc)("Dead Pages Count: %lu", _dead_pages_count);
+      log_info(gc)("Live to Dead Pages: %lu, %lu (remote)", 
+              _live_to_deads, _remote_live_to_deads);
     }
 
     // Option 2: use mark bitmap to find consecutive dead pages.
@@ -1892,6 +1898,13 @@ class G1RebuildRemSetTask: public AbstractGangTask {
             _dead_ranges_log2[log2i(tmp_dead_pages)] += 1;
             _dead_pages_count += tmp_dead_pages;
 
+            // // TODO markPageBitMap
+            // for (int i = 0; i < tmp_dead_pages; i++) {
+            //   if (page_bitmap->is_marked((HeapWord*)((dead_page_start + i) << 12))) {
+            //     log_info(gc)("dead page " PTR_FORMAT " is marked", dead_page_start + i);
+            //   }
+            // }
+
             // Free dead range.
             if (UseFreeDeadPage) {
               // DEBUG
@@ -1899,10 +1912,11 @@ class G1RebuildRemSetTask: public AbstractGangTask {
               // Copy::zero_to_bytes((char*)(dead_page_start << 12), tmp_dead_pages << 12);
 
               if (UseProfileRegionMajflt) {
-                if(_g1h->set_free_range(dead_page_start << 12, tmp_dead_pages << 12)) {
-                  log_info(gc)("[profile_dead_range_in_region_with_bitmap] fails set_free_range, stt: " PTR_FORMAT " end: " PTR_FORMAT, dead_page_start << 12, live_page_start << 12);
-                  os::abort();
-                }
+                size_t lives = 0;
+                size_t remotes = 0;
+                _g1h->set_free_range_profiling(dead_page_start << 12, tmp_dead_pages << 12, &lives, &remotes);
+                _live_to_deads += lives;
+                _remote_live_to_deads += remotes;
               } else if (UseMadvFree) {
                 os::free_page_frames(true,
                   (char*)(dead_page_start << 12), tmp_dead_pages << 12, NULL);
@@ -1978,6 +1992,8 @@ public:
         _dead_ranges_log2 = NEW_C_HEAP_ARRAY(uint, _dead_ranges_len, mtGC);
         memset(_dead_ranges_log2, 0, sizeof(uint) * _dead_ranges_len);
         _dead_pages_count = 0;
+        _live_to_deads = 0;
+        _remote_live_to_deads = 0;
       }
     }
 

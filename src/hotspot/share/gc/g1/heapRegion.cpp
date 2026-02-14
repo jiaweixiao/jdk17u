@@ -114,14 +114,14 @@ void HeapRegion::unlink_from_list() {
   set_containing_set(NULL);
 }
 
-void HeapRegion::hr_clear(bool clear_space) {
+void HeapRegion::hr_clear_profiling(bool clear_space, int type) {
   assert(_humongous_start_region == NULL,
          "we should have already filtered out humongous regions");
 
   clear_young_index_in_cset();
   clear_index_in_opt_cset();
   uninstall_surv_rate_group();
-  set_free();
+  set_free_profiling(type);
   reset_pre_dummy_top();
 
   rem_set()->clear_locked();
@@ -151,7 +151,7 @@ void HeapRegion::calc_gc_efficiency() {
   _gc_efficiency = (double) reclaimable_bytes() / region_elapsed_time_ms;
 }
 
-void HeapRegion::set_free() {
+void HeapRegion::set_free_profiling(int type) {
   report_region_type_change(G1HeapRegionTraceType::Free);
 
   size_t ts = 0, ts_exit_sys = 0, tmp;
@@ -159,8 +159,29 @@ void HeapRegion::set_free() {
 
   // [gc breakdown][region majflt][swapout garbage]
   // Add a free region.
-  if (UseFreeEmptyRegion) {
-    if (UseMadvFree) {
+  // Free all regions or those without youngs in young gc.
+  if (UseFreeEmptyRegion || (type > 1 || (type == 1 && is_old()))) {
+    if (UseProfileRegionMajflt) {
+      size_t lives = 0;
+      size_t remotes = 0;
+      G1CollectedHeap::heap()->set_free_range_profiling((uintptr_t)_bottom, HeapRegion::GrainBytes, &lives, &remotes);
+      Atomic::add(&_live_to_deads, lives, memory_order_relaxed);
+      Atomic::add(&_remote_live_to_deads, remotes, memory_order_relaxed);
+      if (type == 1 && is_young()) {
+        // Young GC or mixed will free young regions.
+        Atomic::add(&_live_to_deads_young, lives, memory_order_relaxed);
+        Atomic::add(&_remote_live_to_deads_young, remotes, memory_order_relaxed);
+      } else if ((type == 1 && is_old()) || type == 2) {
+        // Young GC or mixed will free old regions in CSet.
+        // Conc Mark remark will reclaim empty regions.
+        Atomic::add(&_live_to_deads_conc, lives, memory_order_relaxed);
+        Atomic::add(&_remote_live_to_deads_conc, remotes, memory_order_relaxed);
+      } else if (type == 3) {
+        // Full GC.
+        Atomic::add(&_live_to_deads_full, lives, memory_order_relaxed);
+        Atomic::add(&_remote_live_to_deads_full, remotes, memory_order_relaxed);
+      }
+    } else if (UseMadvFree) {
       ts = os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes, &tmp);
       ts_exit_sys = tmp;
       count = 1;
@@ -180,19 +201,19 @@ void HeapRegion::set_free() {
     }
   }
 
-  if (UseProfileRegionMajflt) {
-    G1CollectedHeap::heap()->set_free_range((uintptr_t)_bottom, HeapRegion::GrainBytes);
-  }
-
-  if (count > 0) {
-    Atomic::add(&_madv_count, (size_t)count, memory_order_relaxed);
-    if (is_young()) {
-      Atomic::add(&_madv_count_young, (size_t)count, memory_order_relaxed);
-    }
-    // Atomic::add(&_madv_cycles, ts, memory_order_relaxed);
-  }
+  // if (count > 0) {
+  //   Atomic::add(&_madv_count, (size_t)count, memory_order_relaxed);
+  //   if (is_young()) {
+  //     Atomic::add(&_madv_count_young, (size_t)count, memory_order_relaxed);
+  //   }
+  //   // Atomic::add(&_madv_cycles, ts, memory_order_relaxed);
+  // }
 
   _type.set_free();
+}
+
+void HeapRegion::set_free() {
+  set_free_profiling(-1);
 }
 
 void HeapRegion::set_eden() {
@@ -321,7 +342,9 @@ HeapRegion::HeapRegion(uint hrm_index,
   _node_index(G1NUMA::UnknownNodeIndex),
   _madv_count(0),
   _madv_count_young(0),
-  _remote_pages(0)
+  _remote_pages(0),
+  _live_to_deads(0),
+  _remote_live_to_deads(0)
 {
   assert(Universe::on_page_boundary(mr.start()) && Universe::on_page_boundary(mr.end()),
          "invalid space boundaries");
@@ -341,7 +364,7 @@ void HeapRegion::initialize(bool clear_space, bool mangle_space) {
   set_compaction_top(bottom());
   reset_bot();
 
-  hr_clear(false /*clear_space*/);
+  hr_clear_profiling(false /*clear_space*/, -1);
 }
 
 void HeapRegion::calc_remote_pages() {

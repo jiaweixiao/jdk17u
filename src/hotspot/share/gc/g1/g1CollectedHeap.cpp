@@ -3929,7 +3929,7 @@ void G1CollectedHeap::record_obj_copy_mem_stats() {
                                                create_g1_evac_summary(&_old_evac_stats));
 }
 
-void G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
+void G1CollectedHeap::free_region_profiling(HeapRegion* hr, FreeRegionList* free_list, int type) {
   assert(!hr->is_free(), "the region should not be free");
   assert(!hr->is_empty(), "the region should not be empty");
   assert(_hrm.is_available(hr->hrm_index()), "region should be committed");
@@ -3947,7 +3947,7 @@ void G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
   }
 
   // Reset region metadata to allow reuse.
-  hr->hr_clear(true /* clear_space */);
+  hr->hr_clear_profiling(true /* clear_space */, type);
   _policy->remset_tracker()->update_at_free(hr);
 
   if (free_list != NULL) {
@@ -3955,11 +3955,21 @@ void G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
   }
 }
 
-void G1CollectedHeap::free_humongous_region(HeapRegion* hr,
-                                            FreeRegionList* free_list) {
+void G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
+  free_region_profiling(hr, free_list, -1);
+}
+
+void G1CollectedHeap::free_humongous_region_profiling(HeapRegion* hr,
+                                                      FreeRegionList* free_list,
+                                                      int type) {
   assert(hr->is_humongous(), "this is only for humongous regions");
   hr->clear_humongous();
-  free_region(hr, free_list);
+  free_region_profiling(hr, free_list, type);
+}
+
+void G1CollectedHeap::free_humongous_region(HeapRegion* hr,
+                                            FreeRegionList* free_list) {
+  free_humongous_region_profiling(hr, free_list, -1);
 }
 
 void G1CollectedHeap::remove_from_old_gen_sets(const uint old_regions_removed,
@@ -4030,6 +4040,42 @@ int G1CollectedHeap::set_free_range(uintptr_t addr, size_t bytes) {
     }
     page_id += 1;
   }
+  return 0;
+}
+
+int G1CollectedHeap::set_free_range_profiling(uintptr_t addr, size_t bytes, size_t* lives, size_t* remotes) {
+  size_t page_size = 4096;
+  uintptr_t base = (uintptr_t)_hrm.reserved().start();
+  // if (addr < base) {
+  //   log_info(gc)("set_free_range: addr < heap base");
+  //   os::abort();
+  // }
+  size_t page_id = (addr - base + page_size - 1) >> 12;
+  size_t end = (addr + bytes - base) >> 12;
+  size_t live_pages = 0;
+  size_t remote_pages = 0;
+  while (page_id < end) {
+    // The page is live before.
+    if (_alloc_bitmap_shm[page_id] == 1) {
+      live_pages += 1;
+      if (_remote_bitmap_shm[page_id] == 1) {
+        remote_pages += 1;
+      }
+    }
+    _alloc_bitmap_shm[page_id] = 0;
+    // We only make a remote page uninit
+    if (_remote_bitmap_shm[page_id]) {
+      _uninit_bitmap_shm[page_id] = 1;
+    }
+    // Profiling
+    if (UseProfileSwapsRegionType) {
+      _free_bitmap_shm[page_id] = 1;
+      _young_bitmap_shm[page_id] = 1;
+    }
+    page_id += 1;
+  }
+  *lives = live_pages;
+  *remotes = remote_pages;
   return 0;
 }
 
@@ -4227,7 +4273,7 @@ public:
     if (r->is_empty()) {
       assert(r->rem_set()->is_empty(), "Empty regions should have empty remembered sets.");
       // Add free regions to the free list
-      r->set_free();
+      r->set_free_profiling(3);
       _hrm->insert_into_free_list(r);
     } else if (!_free_list_only) {
       assert(r->rem_set()->is_empty(), "At this point remembered sets must have been cleared.");

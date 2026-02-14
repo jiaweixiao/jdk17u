@@ -521,6 +521,14 @@ void HeapRegionManager::dump_madv_cost() const {
   uint len = reserved_length();
   size_t count = 0;
   size_t count_young = 0;
+  size_t live_to_deads = 0;
+  size_t remote_live_to_deads = 0;
+  size_t live_to_deads_young = 0;
+  size_t remote_live_to_deads_young = 0;
+  size_t live_to_deads_conc = 0;
+  size_t remote_live_to_deads_conc = 0;
+  size_t live_to_deads_full = 0;
+  size_t remote_live_to_deads_full = 0;
   // size_t time_cycles = 0;
   // size_t time_exit_cycles = 0;
   for (uint i = 0; i < len; i++) {
@@ -530,12 +538,28 @@ void HeapRegionManager::dump_madv_cost() const {
     guarantee(at(i) != nullptr, "Tried to access region %u that has a null HeapRegion*", i);
     count += at(i)->get_madv_count();
     count_young += at(i)->get_madv_count_young();
+    live_to_deads += at(i)->get_live_to_deads();
+    remote_live_to_deads += at(i)->get_remote_live_to_deads();
+    live_to_deads_young += at(i)->get_live_to_deads_young();
+    remote_live_to_deads_young += at(i)->get_remote_live_to_deads_young();
+    live_to_deads_conc += at(i)->get_live_to_deads_conc();
+    remote_live_to_deads_conc += at(i)->get_remote_live_to_deads_conc();
+    live_to_deads_full += at(i)->get_live_to_deads_full();
+    remote_live_to_deads_full += at(i)->get_remote_live_to_deads_full();
     // time_cycles += at(i)->get_madv_cycles();
     // time_exit_cycles += at(i)->get_madv_exit_cycles();
   }
   // log_info(gc)("Free Regions (sum): %lu, %.1fns, exit %.1fns", 
   //         count, time_cycles / 2.4, time_exit_cycles / 2.4);
   log_info(gc)("Free Regions (sum): %lu, young: %lu", count, count_young);
+  log_info(gc)("Live to dead pages in free regions: %lu, %lu (remote), " 
+               "%lu (young), %lu (remote young), " 
+               "%lu (conc), %lu (remote conc), " 
+               "%lu (full), %lu (remote full)",
+               live_to_deads, remote_live_to_deads,
+               live_to_deads_young, remote_live_to_deads_young,
+               live_to_deads_conc, remote_live_to_deads_conc,
+               live_to_deads_full, remote_live_to_deads_full);
 }
 
 void HeapRegionManager::iterate(HeapRegionClosure* blk) const {

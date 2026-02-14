@@ -124,7 +124,7 @@
           "Profile heap region types associated with the swapped pages")    \
                                                                             \
   product(bool, UseFreeEmptyRegion, false,                                  \
-          "Free empty regions.")                                            \
+          "Free old empty regions in CSet of mixed GC found by Conc Mark.") \
                                                                             \
   product(bool, UseFreeDeadPage, false,                                     \
           "Free free pages after CM of G1")                                 \

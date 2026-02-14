@@ -687,6 +687,11 @@ public:
   // Callers must ensure they are the only one calling free on the given region
   // at the same time.
   void free_region(HeapRegion* hr, FreeRegionList* free_list);
+  // @type
+  //  1: young evacuation,
+  //  2: conc remark empty regions,
+  //  3: full gc
+  void free_region_profiling(HeapRegion* hr, FreeRegionList* free_list, int type);
 
   // It dirties the cards that cover the block so that the post
   // write barrier never queues anything when updating objects on this
@@ -703,6 +708,10 @@ public:
   // this for a particular region at once.
   void free_humongous_region(HeapRegion* hr,
                              FreeRegionList* free_list);
+  // @type is same to one in free_region_profiling
+  void free_humongous_region_profiling(HeapRegion* hr,
+                                       FreeRegionList* free_list,
+                                       int type);
 
   // Facility for allocating in 'archive' regions in high heap memory and
   // recording the allocated ranges. These should all be called from the
@@ -1211,6 +1220,7 @@ public:
   int set_alloc_range(uintptr_t addr, size_t bytes);
   bool is_remote(uintptr_t addr);
   int set_free_range(uintptr_t addr, size_t bytes);
+  int set_free_range_profiling(uintptr_t addr, size_t bytes, size_t* lives, size_t* remotes);
   int set_young_range(uintptr_t addr, size_t bytes, bool is_young);
   int set_humon_range(uintptr_t addr, size_t bytes);
 

@@ -443,7 +443,7 @@ class FreeCSetClosure : public HeapRegionClosure {
     stats()->account_evacuated_region(r);
 
     // Free the region and and its remembered set.
-    _g1h->free_region(r, nullptr);
+    _g1h->free_region_profiling(r, nullptr, 1);
     _g1h->hr_printer()->cleanup(r);
   }
 
